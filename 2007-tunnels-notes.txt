@@ -1,0 +1,138 @@
+Problem Notes:
+
+This is a very difficult, but fascinating, graph problem.  It might be a
+stopper, and at best I can't see more than 3-5 teams getting it.
+
+At first glance, it appears to be a very straightforward Network Flow problem
+(and the sample input/output don't contradict this).  But, as it turns out,
+it's not that simple!  The key advantage you have is that you can wait to
+destroy tunnels until the spy has made certain moves.  If he has 5 paths to
+choose from, but each one involves moving through a room with only 2 tunnels
+coming off it (a chokepoint), only two tunnels ever need to be destroyed.
+
+So, how to solve it?  The solution is still Network-Flow-ish, but more
+involved.  Let us store a "d-number" for each room that will eventually become
+the number of tunnels that would have to be destroyed if the spy started in
+that room.
+
+The d-numbers start at infinity.  They are iteratively lowered according to
+this rule: from any starting room, if there exist x,y >= 0 such that x tunnels
+can be destroyed to force all paths to the outside to pass through a room with
+d-number <= y, then reduce the d-number to x+y (if it's higher).  Keep going
+until applying this rule no longer lowers any d-numbers.
+
+The proof that the algorithm works is below; I'm including it to prove the
+correctness of my judge solution.  It's fairly non-trivial.  However, the
+algorithm itself is fairly intuitive if you experiment with the problem for a
+bit.  I think teams may come up with it and use it without actually proving
+that it works.  (And, of course, there might be a simpler approach I haven't
+seen...)
+
+Note that applying d-number reductions is a simple application of network flow:
+choose a y, set all rooms <= y to block flow, then calculate the min cut/max
+flow to the outside of the lair, giving you x.  The one easy optimization I use
+in my judge solution is that, for a given starting room, I don't clear the flow
+information as I lower y.  The already-calculated flows remain valid as rooms
+become unblocked.
+
+
+PROOF OF ALGORITHM:
+
+I'll prove that my algorithm works: in other words, that the final d-number of
+each room is the minimum number of tunnels that ever need to be collapsed if
+the spy starts in that room.
+
+First, note that the algorithm that calculates the d-numbers is monotonic: the
+d-numbers only ever decrease, and the order in which you apply the reductions
+does not matter, because when a reduction is possible it never STOPS being
+possible.  So the order in which reductions are applied can be completely
+arbitrary, and the final d-numbers are always the same.
+
+Now, one direction of the proof is simple: the d-number is clearly an upper
+bound on the minimum number of tunnels we need to collapse.  We can stop the
+spy from escaping from a room by applying the reduction that gave it its
+d-number: collapse the chosen x tunnels, forcing the spy to pass through a room
+with d-number <= y before escaping.  Since you still have y collapses left,
+when he moves into one of those rooms, you can collapse its set of tunnels; and
+so on.  He can't escape.
+
+The tricky part of the proof is to show that it is NECESSARY to collapse this
+many tunnels.  In particular, when using the above strategy, does collapsing a
+tunnel in an early room allow us to collapse fewer tunnels later on?  I will
+show that the answer is no.
+
+
+LEMMA: Given graphs G and G', where G' is G with one tunnel "t" deleted, the
+final d-numbers calculated by the above algorithm for G' are each either the
+same as in G, or one less.
+
+PROOF: All reductions in G apply in G' as well (perhaps even with one fewer
+tunnel deleted), so clearly the final d-numbers in G' are no larger than in G.
+Without loss of generality we can assume the algorithm first reduces all the
+d-numbers in G' to the final values in G.  Suppose, for the sake of
+contradiction, that a reduction eventually reduces a d-number in G' to at least
+two lower than its final value in G.  Consider the first such reduction.
+
+Let us examine one of the G'-specific reduction steps that came before this.
+We know it reduced a d-number by one from that in G.  Let the reduction's room
+be r, and consider its x,y values.  There was a way to delete x tunnels from G'
+such that all escape paths from r pass through a room that had d-number <= y.
+Now, since this reduction did NOT apply in G, one of the following must hold:
+
+1) One of the escape paths that exists in G' with its x tunnels collapsed,
+when considered in G, does NOT pass through a room with d-number <= y.
+However, it must pass through a room which has a d-number of y+1 (since G and
+G' d-numbers don't currently differ by more than one).  That room has already
+been given a G'-specific reduction - and note that r's new G'-specific
+d-number, x+y, is NO SMALLER than that room's already-reduced G'-specific
+d-number, y.
+
+2) ALL of the escape paths that exist in G' with its x tunnels collapsed, when
+considered in G, pass through a room with a d-number <= y.  Then, of course,
+x+1 tunnels can be collapsed in G to make an x+1,y reduction.  Now, there MUST
+be a path in G from r to one of the endpoints "s" of t, a path that never
+passes through any room with a d-number that is <= y.  Otherwise, since no
+escape path could use the extra tunnel without passing through a room with
+d-number <= y, the original x,y reduction would work in G - an impossibility.
+Because of this path, the SAME x+1,y reduction works on room s as well: after
+deleting the x+1 tunnels, there can't be any escape paths from s that never hit
+a room with d-number <= y (or they could be extended to r as well).  So one of
+the endpoints of t has a d-number in G that is <= x+y+1 - that is, AT MOST ONE
+GREATER than r's new G'-specific d-number, x+y.
+
+These two cases, taken together, show that there is an endpoint of t whose
+d-number in G is no more than one greater than ANY of the G'-specific d-numbers
+reduced so far.
+
+Now, let us consider the new reduction, on room r with values x,y, that reduces
+a d-number by at least two from that in G.  Once again there are two cases:
+
+1) One of the escape paths that exists in G' with its x tunnels collapsed,
+when considered in G, does NOT pass through a room with d-number <= y.  As
+above, it must pass through a room which has a d-number of y+1 that was reduced
+to y in G'.  But this means that one endpoint of t must have a d-number <= y+1
+in G.  Thus, deleting the same x tunnels in G produces an x,y+1 reduction: all
+escape paths that DON'T use t must pass through a room with d-number <= y+1
+(the room with d-number <= y in the G' reduction) and all escape paths that DO
+use t pass through one as well.  This is a contradiction, since the new
+reduction is supposed to be 2 less than any possible in G.
+
+2) ALL of the escape paths that exist in G' with its x tunnels collapsed, when
+considered in G, pass through a room with a d-number <= y.  Then, as above,
+an x+1,y reduction works.  Again, this is a contradiction.
+
+So no such G'-specific reduction can exist, and the lemma is proved.
+
+
+Now, suppose the spy starts in a room with final d-number n, and we only have
+n-1 collapses available.  An escape strategy for the spy is as follows: we know
+a path exists to the outside that passes through only rooms with d-number
+>= n (otherwise the current room would have a 0,n-1 reduction).  The spy just
+follows that route until we decide to collapse a tunnel.  Now, according to the
+lemma, we can consider him to be starting in a new lair from a room with a
+final d-number >= n-1 - and we now only have n-2 collapses available.  This
+continues until we have 0 collapses available; he'll still be in a room with
+d-number >= 1, from which he can escape.
+
+Thus, the d-number of a room is exactly the number of collapses necessary to
+trap a spy starting in that room.  QED.
